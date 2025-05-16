@@ -1,5 +1,7 @@
 package io.github.doocs.im.util;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.doocs.im.ClientConfiguration;
 import io.github.doocs.im.model.response.GenericResult;
 import okhttp3.*;
@@ -59,7 +61,7 @@ public class HttpUtil {
                 .writeTimeout(cfg.getWriteTimeout(), TimeUnit.MILLISECONDS)
                 .callTimeout(cfg.getCallTimeout(), TimeUnit.MILLISECONDS)
                 .retryOnConnectionFailure(false)
-                .addInterceptor(new RetryInterceptor(cfg.getMaxRetries(), cfg.getRetryIntervalMs(), DEFAULT_CONFIG.getBusinessRetryCodes(), DEFAULT_CONFIG.isEnableBusinessRetry()))
+                .addInterceptor(new RetryInterceptor(cfg.getMaxRetries(), cfg.getRetryIntervalMs(), config.getBusinessRetryCodes(), config.isEnableBusinessRetry()))
                 .build());
     }
 
@@ -126,10 +128,10 @@ class RetryInterceptor implements Interceptor {
             }
             try {
                 response = chain.proceed(request);
-                if (response.isSuccessful() && !shouldRetry(response)) {
+                if (response.isSuccessful() && !shouldRetry(response,Boolean.TRUE)) {
                     return response;
                 }
-                if (!shouldRetry(response)) {
+                if (!response.isSuccessful() && !shouldRetry(response,Boolean.FALSE)) {
                     return response;
                 }
             } catch (IOException e) {
@@ -153,7 +155,7 @@ class RetryInterceptor implements Interceptor {
         }
     }
 
-    private boolean shouldRetry(Response response) {
+    private boolean shouldRetry(Response response,boolean shouldBusinessRetry) {
         final int code = response.code();
         if (code >= 500 && code < 600) {
             return true;
@@ -161,7 +163,7 @@ class RetryInterceptor implements Interceptor {
         if (RETRYABLE_STATUS_CODES.contains(code)) {
             return true;
         }
-        if (enableBusinessRetry) {
+        if (enableBusinessRetry && shouldBusinessRetry) {
             return shouldRetryBasedOnBusinessCode(response);
         }
         return false;
@@ -182,8 +184,15 @@ class RetryInterceptor implements Interceptor {
                 return false;
             }
             String responseBody = Objects.requireNonNull(response.body()).string();
-            GenericResult genericResult = JsonUtil.str2Obj(responseBody, GenericResult.class);
-            int businessCode = genericResult.getErrorCode();
+            if (responseBody == null){
+                return false;
+            }
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode jsonNode = objectMapper.readTree(responseBody);
+            if(!jsonNode.hasNonNull("errorCode")){
+                return false;
+            }
+            int businessCode = jsonNode.get("errorCode").intValue();
             return businessRetryCodes.contains(businessCode);
         } catch (IOException | IllegalStateException e) {
             return false;
