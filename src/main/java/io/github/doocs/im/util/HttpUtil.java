@@ -3,7 +3,6 @@ package io.github.doocs.im.util;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.doocs.im.ClientConfiguration;
-import io.github.doocs.im.model.response.GenericResult;
 import okhttp3.*;
 
 import java.io.IOException;
